@@ -45,11 +45,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===== Background Posting Task =====
 async def post_loop(bot: Bot):
+    last_post_time = datetime.min
     while True:
         interval = get_interval()
-        message = f"🕒 Automated post at {datetime.now().strftime('%H:%M:%S')}"
-        await bot.send_message(chat_id=CHANNEL_ID, text=message)
-        await asyncio.sleep(interval)
+        now = datetime.now()
+        elapsed = (now - last_post_time).total_seconds()
+
+        if elapsed >= interval:
+            message = f"🕒 Automated post at {now.strftime('%H:%M:%S')}"
+            await bot.send_message(chat_id=CHANNEL_ID, text=message)
+            last_post_time = now
+
+        await asyncio.sleep(1)  # check every second for more responsive updates
+
 
 # ===== Main Entrypoint =====
 if __name__ == "__main__":
