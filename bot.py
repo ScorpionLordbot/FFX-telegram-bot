@@ -1,10 +1,8 @@
 import os
 import asyncio
-from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
-from telegram.ext import ApplicationBuilder
-from telegram.ext import ContextTypes
+from telegram import Update, Bot
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 CHANNEL_ID = os.environ['CHANNEL_ID']
@@ -12,20 +10,19 @@ OWNER_ID = int(os.environ['OWNER_ID'])  # Your Telegram user ID
 
 INTERVAL_FILE = "interval.txt"
 
-# Read interval from file
+# ===== Utils =====
 def get_interval():
     try:
         with open(INTERVAL_FILE, "r") as f:
             return int(f.read().strip())
     except:
-        return 3600  # default 1 hour
+        return 3600  # default to 1 hour
 
-# Write interval to file
 def set_interval(seconds):
     with open(INTERVAL_FILE, "w") as f:
         f.write(str(seconds))
 
-# Bot command: /setinterval 900
+# ===== Handlers =====
 async def set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("⛔ Not authorized.")
@@ -42,7 +39,11 @@ async def set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYP
     except ValueError:
         await update.message.reply_text("❌ Please enter a valid number.")
 
-# Posting loop
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
+
+# ===== Background Posting Task =====
 async def post_loop(bot: Bot):
     while True:
         interval = get_interval()
@@ -50,34 +51,17 @@ async def post_loop(bot: Bot):
         await bot.send_message(chat_id=CHANNEL_ID, text=message)
         await asyncio.sleep(interval)
 
-async def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+# ===== Main Entrypoint =====
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setinterval", set_interval_command))
 
-    # Start post loop in background
-    asyncio.create_task(post_loop(app.bot))
+    async def start_loop(application):
+        asyncio.create_task(post_loop(application.bot))
 
-    # Start listening for commands
-    print("Bot running...")
-    await app.run_polling()
+    app.post_init = start_loop
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
-
-if __name__ == "__main__":
-    import asyncio
-
-    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot_app.add_handler(CommandHandler("setinterval", set_interval_command))
-    bot_app.add_handler(CommandHandler("start", start))  # Optional for debugging
-
-    # Start the background task (posting loop)
-    async def start_loop():
-        asyncio.create_task(post_loop(bot_app.bot))
-
-    bot_app.post_init = start_loop
-
-    # Run the bot (sync-safe)
-    bot_app.run_polling()
-
+    print("🚀 Bot is running...")
+    app.run_polling()
