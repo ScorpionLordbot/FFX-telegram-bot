@@ -9,6 +9,7 @@ CHANNEL_ID = os.environ['CHANNEL_ID']
 OWNER_ID = int(os.environ['OWNER_ID'])  # Your Telegram user ID
 
 INTERVAL_FILE = "interval.txt"
+MESSAGE_FILE = "message.txt"
 
 # ===== Utils =====
 def get_interval():
@@ -21,6 +22,17 @@ def get_interval():
 def set_interval(seconds):
     with open(INTERVAL_FILE, "w") as f:
         f.write(str(seconds))
+
+def get_message():
+    try:
+        with open(MESSAGE_FILE, "r") as f:
+            return f.read().strip()
+    except:
+        return "🕒 Default automated message."
+
+def set_message(new_msg):
+    with open(MESSAGE_FILE, "w") as f:
+        f.write(new_msg.strip())
 
 # ===== Handlers =====
 async def set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -39,6 +51,19 @@ async def set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYP
     except ValueError:
         await update.message.reply_text("❌ Please enter a valid number.")
 
+async def set_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("⛔ Not authorized.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /setmessage <your message>")
+        return
+
+    new_msg = " ".join(context.args)
+    set_message(new_msg)
+    await update.message.reply_text("✅ Message updated successfully!")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
@@ -52,12 +77,11 @@ async def post_loop(bot: Bot):
         elapsed = (now - last_post_time).total_seconds()
 
         if elapsed >= interval:
-            message = f"🕒 Automated post at {now.strftime('%H:%M:%S')}"
+            message = get_message()
             await bot.send_message(chat_id=CHANNEL_ID, text=message)
             last_post_time = now
 
-        await asyncio.sleep(1)  # check every second for more responsive updates
-
+        await asyncio.sleep(1)  # check every second for responsive updates
 
 # ===== Main Entrypoint =====
 if __name__ == "__main__":
@@ -65,6 +89,7 @@ if __name__ == "__main__":
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setinterval", set_interval_command))
+    app.add_handler(CommandHandler("setmessage", set_message_command))
 
     async def start_loop(application):
         asyncio.create_task(post_loop(application.bot))
