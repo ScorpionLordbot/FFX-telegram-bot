@@ -3,6 +3,7 @@ import asyncio
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
+from telegram.ext import ApplicationBuilder
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 CHANNEL_ID = os.environ['CHANNEL_ID']
@@ -62,13 +63,16 @@ async def main():
 if __name__ == "__main__":
     import asyncio
 
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "This event loop is already running" in str(e):
-            loop = asyncio.get_event_loop()
-            loop.create_task(main())
-            loop.run_forever()
-        else:
-            raise
+    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
+    bot_app.add_handler(CommandHandler("setinterval", set_interval_command))
+    bot_app.add_handler(CommandHandler("start", start))  # Optional for debugging
+
+    # Start the background task (posting loop)
+    async def start_loop():
+        asyncio.create_task(post_loop(bot_app.bot))
+
+    bot_app.post_init = start_loop
+
+    # Run the bot (sync-safe)
+    bot_app.run_polling()
 
