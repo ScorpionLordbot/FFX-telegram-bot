@@ -4,6 +4,7 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
 from telegram.ext import ApplicationBuilder
+from telegram.ext import ContextTypes
 
 BOT_TOKEN = os.environ['BOT_TOKEN']
 CHANNEL_ID = os.environ['CHANNEL_ID']
@@ -59,6 +60,10 @@ async def main():
     # Start listening for commands
     print("Bot running...")
     await app.run_polling()
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
 
 if __name__ == "__main__":
     import asyncio
