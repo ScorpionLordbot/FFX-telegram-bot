@@ -9,97 +9,69 @@ BOT_TOKEN = os.environ['BOT_TOKEN']
 CHANNEL_ID = os.environ['CHANNEL_ID']
 OWNER_ID = int(os.environ['OWNER_ID'])
 
-# === Local File Constants ===
-INTERVAL_FILE = "interval.txt"
-MESSAGES_FILE = "messages.txt"
+# === File Constants ===
+MESSAGES_FILE = "messages.txt"  # Each line: interval|message
 
 # ===== Utility Functions =====
-def get_interval():
-    try:
-        with open(INTERVAL_FILE, "r") as f:
-            return int(f.read().strip())
-    except:
-        return 3600
 
-def set_interval(seconds):
-    with open(INTERVAL_FILE, "w") as f:
-        f.write(str(seconds))
-
-def get_messages():
+def load_messages():
+    messages = []
     try:
         with open(MESSAGES_FILE, "r") as f:
-            return [line.strip() for line in f if line.strip()]
+            for line in f:
+                parts = line.strip().split("|", 1)
+                if len(parts) == 2 and parts[0].isdigit():
+                    interval = int(parts[0])
+                    message = parts[1]
+                    messages.append((interval, message))
     except:
-        return ["🕒 Default automated message."]
+        pass
+    return messages
 
 def save_messages(messages):
     with open(MESSAGES_FILE, "w") as f:
-        for msg in messages:
-            f.write(msg.strip() + "\n")
-
-def add_message(new_msg):
-    messages = get_messages()
-    messages.append(new_msg)
-    save_messages(messages)
-
-def update_message(index, new_msg):
-    messages = get_messages()
-    if 0 <= index < len(messages):
-        messages[index] = new_msg
-        save_messages(messages)
-        return True
-    return False
-
-def delete_message(index):
-    messages = get_messages()
-    if 0 <= index < len(messages):
-        del messages[index]
-        save_messages(messages)
-        return True
-    return False
+        for interval, msg in messages:
+            f.write(f"{interval}|{msg}\n")
 
 # ===== Command Handlers =====
-async def set_interval_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("⛔ Not authorized.")
-        return
 
-    if not context.args:
-        await update.message.reply_text("Usage: /setinterval <seconds>")
-        return
-
-    try:
-        seconds = int(context.args[0])
-        set_interval(seconds)
-        await update.message.reply_text(f"✅ Interval updated to {seconds} seconds.")
-    except ValueError:
-        await update.message.reply_text("❌ Please enter a valid number.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
 
 async def add_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    if not context.args:
-        await update.message.reply_text("Usage: /addmessage <your message>")
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /addmessage <interval_in_seconds> <your message>")
         return
 
-    new_msg = " ".join(context.args)
-    add_message(new_msg)
-    await update.message.reply_text("✅ Message added successfully!")
+    try:
+        interval = int(context.args[0])
+        msg = " ".join(context.args[1:])
+        messages = load_messages()
+        messages.append((interval, msg))
+        save_messages(messages)
+        await update.message.reply_text("✅ Message added successfully.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid interval. It should be a number.")
 
 async def view_messages_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("⛔ Not authorized.")
         return
 
-    messages = get_messages()
+    messages = load_messages()
     if not messages:
-        await update.message.reply_text("⚠️ No messages found.")
+        await update.message.reply_text("ℹ️ No messages stored.")
         return
 
-    formatted = "\n\n".join([f"{i + 1}. {msg}" for i, msg in enumerate(messages)])
-    await update.message.reply_text(f"📋 Stored Messages:\n\n{formatted}")
+    reply = "📋 Stored Messages:\n\n"
+    for idx, (interval, msg) in enumerate(messages, start=1):
+        reply += f"{idx}. ({interval}s) {msg}\n"
+    await update.message.reply_text(reply)
 
 async def edit_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
@@ -113,12 +85,16 @@ async def edit_message_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         index = int(context.args[0]) - 1
         new_msg = " ".join(context.args[1:])
-        if update_message(index, new_msg):
-            await update.message.reply_text("✅ Message updated successfully!")
+        messages = load_messages()
+        if 0 <= index < len(messages):
+            interval = messages[index][0]
+            messages[index] = (interval, new_msg)
+            save_messages(messages)
+            await update.message.reply_text("✏️ Message updated.")
         else:
-            await update.message.reply_text("❌ Invalid index.")
+            await update.message.reply_text("❌ Invalid message index.")
     except ValueError:
-        await update.message.reply_text("❌ Index must be a number.")
+        await update.message.reply_text("❌ Please provide a valid index.")
 
 async def delete_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
@@ -131,42 +107,41 @@ async def delete_message_command(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         index = int(context.args[0]) - 1
-        if delete_message(index):
-            await update.message.reply_text("✅ Message deleted successfully!")
+        messages = load_messages()
+        if 0 <= index < len(messages):
+            messages.pop(index)
+            save_messages(messages)
+            await update.message.reply_text("🗑️ Message deleted.")
         else:
-            await update.message.reply_text("❌ Invalid index.")
+            await update.message.reply_text("❌ Invalid message index.")
     except ValueError:
-        await update.message.reply_text("❌ Index must be a number.")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    await update.message.reply_text(f"👋 Hey! Your Telegram user ID is: {user_id}")
+        await update.message.reply_text("❌ Please enter a valid number.")
 
 # ===== Background Posting Task =====
+
 async def post_loop(bot: Bot):
-    last_post_time = datetime.min
-    message_index = 0
+    messages = load_messages()
+    if not messages:
+        return
 
+    index = 0
     while True:
-        interval = get_interval()
-        now = datetime.now()
-        elapsed = (now - last_post_time).total_seconds()
+        messages = load_messages()
+        if not messages:
+            await asyncio.sleep(10)
+            continue
 
-        if elapsed >= interval:
-            messages = get_messages()
-            if messages:
-                await bot.send_message(chat_id=CHANNEL_ID, text=messages[message_index % len(messages)])
-                message_index += 1
-                last_post_time = now
-
-        await asyncio.sleep(1)
+        interval, message = messages[index % len(messages)]
+        await bot.send_message(chat_id=CHANNEL_ID, text=message)
+        await asyncio.sleep(interval)
+        index += 1
 
 # ===== Main Entrypoint =====
+
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setinterval", set_interval_command))
     app.add_handler(CommandHandler("addmessage", add_message_command))
     app.add_handler(CommandHandler("viewmessages", view_messages_command))
     app.add_handler(CommandHandler("editmessage", edit_message_command))
